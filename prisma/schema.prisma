@@ -1,0 +1,279 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  teacher       Teacher?
+  student       Student?
+  parent        Parent?
+  eventsCreated Event[]
+  notifications Notification[]
+}
+
+model Teacher {
+  id             String          @id @default(uuid())
+  user           User            @relation(fields: [userId], references: [id])
+  userId         String          @unique
+  bio            String?
+  subjects       ClassSubject[]
+  classes        Class[]         @relation("ClassTeachers")
+  attendanceMarked Attendance[]
+  timetable      TimetableEntry[]
+  materials      Material[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Student {
+  id           String          @id @default(uuid())
+  user         User            @relation(fields: [userId], references: [id])
+  userId       String          @unique
+  rollNumber   String          @unique
+  class        Class?          @relation(fields: [classId], references: [id])
+  classId      String?
+  enrollments  Enrollment[]
+  attendance   Attendance[]
+  parents      ParentStudent[]
+  results      Result[]
+  invoices     FeeInvoice[]
+  submissions  ExamSubmission[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Parent {
+  id        String          @id @default(uuid())
+  user      User            @relation(fields: [userId], references: [id])
+  userId    String          @unique
+  students  ParentStudent[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model ParentStudent {
+  parent    Parent @relation(fields: [parentId], references: [id])
+  parentId  String
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  @@id([parentId, studentId])
+}
+
+model Class {
+  id          String           @id @default(uuid())
+  name        String
+  section     String?
+  year        Int
+  students    Student[]
+  subjects    ClassSubject[]
+  teachers    Teacher[]        @relation("ClassTeachers")
+  timetable   TimetableEntry[]
+  enrollments Enrollment[]
+  attendance  Attendance[]
+  exams       Exam[]
+  materials   Material[]
+  events      Event[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Subject {
+  id          String           @id @default(uuid())
+  name        String
+  code        String           @unique
+  description String?
+  classes     ClassSubject[]
+  exams       Exam[]
+  materials   Material[]
+  timetable   TimetableEntry[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model ClassSubject {
+  id         String   @id @default(uuid())
+  class      Class    @relation(fields: [classId], references: [id])
+  classId    String
+  subject    Subject  @relation(fields: [subjectId], references: [id])
+  subjectId  String
+  teacher    Teacher? @relation(fields: [teacherId], references: [id])
+  teacherId  String?
+
+  @@unique([classId, subjectId])
+}
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  student    Student  @relation(fields: [studentId], references: [id])
+  studentId  String
+  class      Class    @relation(fields: [classId], references: [id])
+  classId    String
+  startDate  DateTime
+  endDate    DateTime?
+
+  @@unique([studentId, classId])
+}
+
+model Attendance {
+  id         String    @id @default(uuid())
+  student    Student   @relation(fields: [studentId], references: [id])
+  studentId  String
+  class      Class     @relation(fields: [classId], references: [id])
+  classId    String
+  date       DateTime
+  status     AttendanceStatus
+  markedBy   Teacher   @relation(fields: [teacherId], references: [id])
+  teacherId  String
+  createdAt  DateTime  @default(now())
+
+  @@unique([studentId, date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+model Exam {
+  id          String      @id @default(uuid())
+  title       String
+  subject     Subject     @relation(fields: [subjectId], references: [id])
+  subjectId   String
+  class       Class       @relation(fields: [classId], references: [id])
+  classId     String
+  date        DateTime
+  durationMin Int
+  maxMarks    Int
+  questions   ExamQuestion[]
+  submissions ExamSubmission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model ExamQuestion {
+  id        String   @id @default(uuid())
+  exam      Exam     @relation(fields: [examId], references: [id])
+  examId    String
+  text      String
+  maxMarks  Int
+}
+
+model ExamSubmission {
+  id        String   @id @default(uuid())
+  exam      Exam     @relation(fields: [examId], references: [id])
+  examId    String
+  student   Student  @relation(fields: [studentId], references: [id])
+  studentId String
+  answers   Json
+  submittedAt DateTime @default(now())
+  result    Result?
+
+  @@unique([examId, studentId])
+}
+
+model Result {
+  id           String         @id @default(uuid())
+  submission   ExamSubmission @relation(fields: [submissionId], references: [id])
+  submissionId String         @unique
+  student      Student        @relation(fields: [studentId], references: [id])
+  studentId    String
+  obtainedMarks Int
+  grade        String?
+  publishedAt  DateTime?
+}
+
+model FeeInvoice {
+  id          String    @id @default(uuid())
+  student     Student   @relation(fields: [studentId], references: [id])
+  studentId   String
+  amount      Int
+  dueDate     DateTime
+  status      InvoiceStatus @default(PENDING)
+  issuedAt    DateTime  @default(now())
+  paidAt      DateTime?
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model Material {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  subjectId   String
+  class       Class?   @relation(fields: [classId], references: [id])
+  classId     String?
+  fileUrl     String
+  fileKey     String
+  createdBy   Teacher  @relation(fields: [teacherId], references: [id])
+  teacherId   String
+  createdAt   DateTime @default(now())
+}
+
+model TimetableEntry {
+  id          String   @id @default(uuid())
+  class       Class    @relation(fields: [classId], references: [id])
+  classId     String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  subjectId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id])
+  teacherId   String
+  dayOfWeek   Int      // 0-6
+  startTime   String
+  endTime     String
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  class       Class?   @relation(fields: [classId], references: [id])
+  classId     String?
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  title       String
+  body        String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
